@@ -146,17 +146,6 @@ function init(self)
 	self.human_counter = 0
 	self.human_spawners = {}
 
-
-	self.map = {}
-	local x, y, w, h = tilemap.get_bounds("/map#map")
-	for xi = x, w do
-		self.map[xi] = {}
-		for yi = y, h do
-			local tile = tilemap.get_tile("/map#map", "blockers", xi, yi)
-			self.map[xi][yi] = { x = xi, y = yi, cost = cost and 1 or 1000 }
-		end
-	end
-
 	self.kill_sound = blip.hurt(101)
 	msg.post("#", "start_zombie_spawner")
 	msg.post("#", "start_human_spawner")

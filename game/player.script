@@ -1,6 +1,5 @@
 local camera = require "orthographic.camera"
 local input = require "ludobits.m.input"
-local kinematic = require "ludobits.m.kinematic"
 local utils = require "game.utils"
 
 local CAMERA = hash("/camera")
@@ -41,7 +40,6 @@ function init(self)
 	input.acquire()
 	self.direction = vmath.vector3()
 	self.animation = nil
-	self.physics = kinematic.create()
 	--	504 507 513 516 517 
 	self.shotgun_sound = blip.explosion(517)
 end
@@ -75,19 +73,17 @@ function update(self, dt)
 	end
 													
 	go.set_position(pos + self.direction * 40 * dt)
-
-	self.physics.update(dt)
 end
 
 function on_message(self, message_id, message, sender)
 	if message_id == hash("animation_done") then
 		self.animation = nil
 	elseif message_id == CONTACT_POINT_RESPONSE and message.group == WALL then
-		self.physics.on_message(message_id, message, sender)
+		go.set_position(go.get_position() + message.normal * message.distance)
 	elseif message_id == hash("ray_cast_response") then
 		msg.post("/controller", "kill_zombie", { id = message.id })
 	elseif message_id == hash("setup_camera") then
-		camera.follow(CAMERA, go.get_id(), 0.5)
+		--camera.follow(CAMERA, go.get_id(), 0.5)
 		camera.bounds(CAMERA, 0, 180, 180, 0)
 	end
 end
