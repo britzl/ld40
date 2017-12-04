@@ -11,5 +11,4 @@ Protect the survivors of the zombie apocalypse. The more survivors the more zomb
 ## Credits
 * Code: Björn Ritzl
 * Graphics: [Micro Zombie Apocalypse Pack](https://momeg.itch.io/zombie-apocalypse-asset-pack)
-
-#MADEWITHDEFOLD
+* Engine: [Defold](https://www.defold.com)
