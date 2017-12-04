@@ -1,0 +1,13 @@
+local COLLISION_RESPONSE = hash("collision_response")
+local CONTACT_POINT_RESPONSE = hash("contact_point_response")
+local HUMAN = hash("human")
+local ZOMBIE = hash("zombie")
+local WALL = hash("wall")
+
+function on_message(self, message_id, message, sender)
+	if message_id == CONTACT_POINT_RESPONSE then
+		if message.group == WALL then
+			go.set_position(go.get_position() + message.normal * message.distance)
+		end
+	end
+end

@@ -1,0 +1,7 @@
+go.property("active", true)
+
+function init(self)
+	if self.active then
+		msg.post("/controller", "register_human_spawner", { id = go.get_id() })
+	end
+end

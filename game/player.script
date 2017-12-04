@@ -1,0 +1,114 @@
+local camera = require "orthographic.camera"
+local input = require "ludobits.m.input"
+local kinematic = require "ludobits.m.kinematic"
+local utils = require "game.utils"
+
+local CAMERA = hash("/camera")
+local CROSSHAIR = hash("/crosshair")
+
+local CONTACT_POINT_RESPONSE = hash("contact_point_response")
+
+local WALL = hash("wall")
+local ZOMBIE = hash("zombie")
+local HUMAN = hash("human")
+
+local UP = hash("up")
+local DOWN = hash("down")
+local LEFT = hash("left")
+local RIGHT = hash("right")
+local FIRE = hash("fire")
+
+local ANIMS = {
+	[utils.UL] = hash("player_ul"),
+	[utils.U] = hash("player_u"),
+	[utils.UR] = hash("player_ur"),
+	[utils.R] = hash("player_r"),
+	[utils.DR] = hash("player_dr"),
+	[utils.D] = hash("player_d"),
+	[utils.DL] = hash("player_dl"),
+	[utils.L] = hash("player_l"),
+}
+
+local function play_animation(self, id)
+	if self.animation ~= id then
+		msg.post("#sprite", "play_animation", { id = id })
+		self.animation = id
+	end
+end
+
+function init(self)
+	msg.post("#", "setup_camera")
+	input.acquire()
+	self.direction = vmath.vector3()
+	self.animation = nil
+	self.physics = kinematic.create()
+	--	504 507 513 516 517 
+	self.shotgun_sound = blip.explosion(517)
+end
+
+function final(self)
+	-- Add finalization code here
+	-- Remove this function if not needed
+end
+
+function update(self, dt)
+	local pos = go.get_position()
+
+	if input.is_pressed(UP) then
+		self.direction.y = 1
+	elseif input.is_pressed(DOWN) then
+		self.direction.y = -1
+	else
+		self.direction.y = 0
+	end
+	
+	if input.is_pressed(RIGHT) then
+		self.direction.x = 1
+	elseif input.is_pressed(LEFT) then
+		self.direction.x = -1
+	else
+		self.direction.x = 0
+	end
+
+	if self.direction.x ~= 0 or self.direction.y ~= 0 then
+		play_animation(self, utils.dir_to_anim(self.direction, ANIMS))
+	end
+													
+	go.set_position(pos + self.direction * 40 * dt)
+
+	self.physics.update(dt)
+end
+
+function on_message(self, message_id, message, sender)
+	if message_id == hash("animation_done") then
+		self.animation = nil
+	elseif message_id == CONTACT_POINT_RESPONSE and message.group == WALL then
+		self.physics.on_message(message_id, message, sender)
+	elseif message_id == hash("ray_cast_response") then
+		msg.post("/controller", "kill_zombie", { id = message.id })
+	elseif message_id == hash("setup_camera") then
+		camera.follow(CAMERA, go.get_id(), 0.5)
+		camera.bounds(CAMERA, 0, 180, 180, 0)
+	end
+end
+
+function on_input(self, action_id, action)
+	input.on_input(action_id, action)
+	local player_pos = go.get_world_position()
+	local crosshair_pos = camera.screen_to_world(CAMERA, vmath.vector3(action.x, action.y, 0))
+	go.set_position(crosshair_pos, CROSSHAIR)
+
+	if action_id == FIRE and action.released then
+		local fire_dir = vmath.normalize(player_pos - crosshair_pos)
+		local distance = vmath.length(player_pos - crosshair_pos)
+		local from = player_pos
+		local to = player_pos - (fire_dir * distance * 1.1)
+		physics.ray_cast(from, to, { hash("zombie") })
+		blip.play(self.shotgun_sound)
+	end
+end
+
+function on_reload(self)
+	-- Add reload-handling code here
+	-- Remove this function if not needed
+end

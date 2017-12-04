@@ -1,0 +1,220 @@
+local utils = require "game.utils"
+
+local ZOMBIE_ANIMS = {
+	[utils.UL] = hash("zombie_ul"),
+	[utils.U] = hash("zombie_u"),
+	[utils.UR] = hash("zombie_ur"),
+	[utils.R] = hash("zombie_r"),
+	[utils.DR] = hash("zombie_dr"),
+	[utils.D] = hash("zombie_d"),
+	[utils.DL] = hash("zombie_dl"),
+	[utils.L] = hash("zombie_l"),
+}
+
+local HUMAN_ANIMS = {
+	[utils.UL] = hash("human_ul"),
+	[utils.U] = hash("human_u"),
+	[utils.UR] = hash("human_ur"),
+	[utils.R] = hash("human_r"),
+	[utils.DR] = hash("human_dr"),
+	[utils.D] = hash("human_d"),
+	[utils.DL] = hash("human_dl"),
+	[utils.L] = hash("human_l"),
+}
+
+local ZOMBIE_KILL_ANIMS = {
+	[utils.UL] = hash("zombie_kill_ul"),
+	[utils.U] = hash("zombie_kill_u"),
+	[utils.UR] = hash("zombie_kill_ur"),
+	[utils.R] = hash("zombie_kill_r"),
+	[utils.DR] = hash("zombie_kill_dr"),
+	[utils.D] = hash("zombie_kill_d"),
+	[utils.DL] = hash("zombie_kill_dl"),
+	[utils.L] = hash("zombie_kill_l"),
+}
+
+local function show_message(message)
+	label.set_text("message#label", message)
+	go.set_position(vmath.vector3(-180, 90, 0), "message")
+	go.animate("message", "position.x", go.PLAYBACK_ONCE_FORWARD, 90, go.EASING_OUTQUAD, 1, 0)
+	go.animate("message", "position.x", go.PLAYBACK_ONCE_FORWARD, 360, go.EASING_INQUAD, 1, 3.5)
+end
+
+local function update_labels(self)
+	label.set_text("hud#humanlabel", "HUMANS: " .. self.human_counter)
+	label.set_text("hud#zombielabel", "ZOMBIES: " .. self.zombie_counter)
+end
+
+local function spawn_zombie(self, position)
+	self.zombie_counter = self.zombie_counter + 1
+	update_labels(self)
+	local id = factory.create("#zombiefactory", position)
+	self.zombies[id] = {
+		id = id,
+		position = position,
+		anim = nil,
+		sprite = msg.url(nil, id, "sprite"),
+		collision = msg.url(nil, id, "collisionobject"),
+	}
+end
+
+local function kill_zombie(self, zombie_id)
+	-- kill zombie
+	self.zombie_counter = self.zombie_counter - 1
+	update_labels(self)
+	blip.play(self.kill_sound)
+	local zombie = self.zombies[zombie_id]
+	self.zombies[zombie.id] = nil
+
+	-- change to a zombie corpse
+	local anim = utils.dir_to_anim(zombie.dir * -1, ZOMBIE_KILL_ANIMS)
+	msg.post(zombie.collision, "disable")
+	msg.post(zombie.sprite, "play_animation", { id = anim })
+	table.insert(self.zombie_corpses, zombie)
+	-- prune to max 100 corpse
+	if #self.zombie_corpses > 100 then
+		local zombie_corspe = table.remove(self.zombie_corpses, 1)
+		go.delete(zombie_corspe.id)
+	end
+end
+
+
+local function spawn_human(self, position)
+	self.human_counter = self.human_counter + 1
+	update_labels(self)
+	local id = factory.create("#humanfactory", position)
+	self.humans[id] = {
+		id = id,
+		position = position,
+		anim = nil,
+		sprite = msg.url(nil, id, "sprite"),
+		collision = msg.url(nil, id, "collisionobject"),
+		offset = vmath.vector3(math.random(-10, 10), math.random(-10, 10), 0)
+	}
+end
+
+
+local function kill_human(self, human_id, zombie_id)
+	-- let the zombie stop and eat for a few seconds
+	local zombie = self.zombies[zombie_id]
+	zombie.eating = true
+	timer.seconds(3, function()
+		zombie.eating = false
+	end)
+
+	-- kill the human
+	self.human_counter = self.human_counter - 1
+	update_labels(self)
+	blip.play(self.kill_sound)
+	local human = self.humans[human_id]
+	self.humans[human.id] = nil
+	msg.post(human.collision, "disable")
+	msg.post(human.sprite, "play_animation", { id = hash("human_kill") })
+
+	-- let it respawn as a zombie after a while
+	timer.seconds(10, function()
+		go.delete(human.id)
+		spawn_zombie(self, human.position)
+	end)
+end
+
+
+local function start_zombie_spawner(self)
+	local delay = math.max(1, 10 / (1 + self.human_counter))
+	timer.seconds(delay, function()
+		local position = self.zombie_spawners[math.random(1, #self.zombie_spawners)]
+		spawn_zombie(self, position)
+		msg.post("#", "start_zombie_spawner")
+	end)
+end
+
+
+local function start_human_spawner(self)
+	timer.repeating(math.random(4, 8), function()
+		local position = self.human_spawners[math.random(1, #self.human_spawners)]
+		spawn_human(self, position)
+	end)
+end
+
+
+function init(self)
+	self.zombies = {}
+	self.zombie_spawners = {}
+	self.zombie_corpses = {}
+	self.zombie_counter = 0
+	self.humans = {}
+	self.human_counter = 0
+	self.human_spawners = {}
+
+
+	self.map = {}
+	local x, y, w, h = tilemap.get_bounds("/map#map")
+	for xi = x, w do
+		self.map[xi] = {}
+		for yi = y, h do
+			local tile = tilemap.get_tile("/map#map", "blockers", xi, yi)
+			self.map[xi][yi] = { x = xi, y = yi, cost = cost and 1 or 1000 }
+		end
+	end
+
+	self.kill_sound = blip.hurt(101)
+	msg.post("#", "start_zombie_spawner")
+	msg.post("#", "start_human_spawner")
+	msg.post("@render:", "clear_color", { color = vmath.vector4(0x60 / 255, 0x59 / 255, 0x51 / 255, 1) })
+	show_message("\"The more humans,\nthe worse it gets\"\n\nLudum Dare 40 Jam\n BY BJORN RITZL\n#MADE WITH DEFOLD\n\nWASD=MOVE LMB=FIRE")
+end
+
+function update(self, dt)
+	local player_pos = go.get_position("/player")
+
+	for id,zombie in pairs(self.zombies) do
+		if not zombie.eating then
+			zombie.position = go.get_position(zombie.id)
+			zombie.dir = vmath.normalize(player_pos - zombie.position)
+			zombie.position = zombie.position + zombie.dir * 20 * dt
+			go.set_position(zombie.position, id)
+
+			local anim = utils.dir_to_anim(zombie.dir, ZOMBIE_ANIMS)
+			if zombie.anim ~= anim then
+				zombie.anim = anim
+				msg.post(zombie.sprite, "play_animation", { id = anim })
+			end
+		end
+	end
+
+	for id,human in pairs(self.humans) do
+		human.position = go.get_position(human.id)
+		local dir = player_pos + human.offset - human.position
+		local distance = vmath.length(dir)
+		local speed = math.min(math.abs(distance) * 2, 30)
+		human.dir = vmath.normalize(dir)
+		human.position = human.position + human.dir * speed * dt
+		go.set_position(human.position, id)
+
+		local anim = utils.dir_to_anim(human.dir, HUMAN_ANIMS)
+		if human.anim ~= anim then
+			human.anim = anim
+			msg.post(human.sprite, "play_animation", { id = anim })
+		end
+	end
+end
+
+function on_message(self, message_id, message, sender)
+	if message_id == hash("spawn_zombie") then
+		spawn_zombie(self, message.position)
+	elseif message_id == hash("spawn_human") then
+		spawn_human(self, message.position)
+	elseif message_id == hash("kill_zombie") then
+		kill_zombie(self, message.id)
+	elseif message_id == hash("kill_human") then
+		kill_human(self, message.id, message.zombie_id)
+	elseif message_id == hash("register_zombie_spawner") then
+		table.insert(self.zombie_spawners, go.get_position(message.id))
+	elseif message_id == hash("register_human_spawner") then
+		table.insert(self.human_spawners, go.get_position(message.id))
+	elseif message_id == hash("start_zombie_spawner") then
+		start_zombie_spawner(self)
+	elseif message_id == hash("start_human_spawner") then
+		start_human_spawner(self)
+	end
+end
