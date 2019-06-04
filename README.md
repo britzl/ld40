@@ -8,6 +8,9 @@ Protect the survivors of the zombie apocalypse. The more survivors the more zomb
 * WASD = Movement
 * LMB = Fire
 
+## Play it!
+https://britzl.github.io/Zombies/
+
 ## Credits
 * Code: Björn Ritzl
 * Graphics: [Micro Zombie Apocalypse Pack](https://momeg.itch.io/zombie-apocalypse-asset-pack)
